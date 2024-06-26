@@ -1,27 +1,6 @@
-# 🤖 Renumics RAG: Explore and Visualize RAG Data
+# 🤖 Task-BreakDown RAG: Explore and Visualize RAG Data
 
-Retrieval-augmented generation assistant demo using [LangChain](https://github.com/langchain-ai/langchain) and [Streamlit](https://github.com/streamlit/streamlit).
-
-## 🛠️ Installation
-
-Setup a virtual environment in the project directory:
-
-```shell
-python3.8 -m venv .venv
-source .venv/bin/activate  # Linux/MacOS
-# .\.venv\Scripts\activate.bat  # Windows CMD
-# .\.venv\Scripts\activate.ps1  # PowerShell
-pip install -IU pip setuptools wheel
-```
-
-Install the RAG demo package and some extra dependencies:
-
-```shell
-# For GPU support
-pip install renumics-rag[all]@git+https://github.com/Renumics/renumics-rag.git torch torchvision sentence-transformers accelerate
-# For CPU support
-# pip install renumics-rag[all]@git+https://github.com/Renumics/renumics-rag.git torch torchvision sentence-transformers accelerate --extra-index-url https://download.pytorch.org/whl/cpu
-```
+Retrieval-augmented generation assistant demo is modified from [renumics-rag](https://github.com/Renumics/renumics-rag) that uses [LangChain](https://github.com/langchain-ai/langchain) and [Streamlit](https://github.com/streamlit/streamlit).
 
 ## ⚒️ Local Setup
 
@@ -29,31 +8,16 @@ If you intend to edit, not simply use, this project, clone the entire repository
 
 ```shell
 git clone git@github.com:Renumics/renumics-rag.git
+git checkout -b task_breakdown
+```
+### Setup an anaconda environment
+```shell
+conda create -n rag_task_breakdown python=3.8.10 # Create an anaconda environment with Python>=3.8.10
+conda activate rag_task_breakdown                # Activate the rag_task_breakdown environment
+pip install poetry                               # Install poetry in the anaconda environment. Poetry is for Python packaging and dependency management.
 ```
 
 Then install it in editable mode.
-
-### Via `pip`
-
-Setup virtual environment in the project folder:
-
-```shell
-python3.8 -m venv .venv
-source .venv/bin/activate  # Linux/MacOS
-# .\.venv\Scripts\activate.bat  # Windows CMD
-# .\.venv\Scripts\activate.ps1  # PowerShell
-pip install -IU pip setuptools wheel
-```
-
-Install the RAG demo package and some extra dependencies:
-
-```shell
-pip install -e .[all]
-# For GPU support
-pip install pandas torch torchvision sentence-transformers accelerate
-# For CPU support
-# pip install pandas torch torchvision sentence-transformers accelerate --extra-index-url https://download.pytorch.org/whl/cpu
-```
 
 ### Via `poetry`
 
@@ -77,7 +41,7 @@ poetry shell
 
 ### ⚙️ Configuration
 
-If you plan to use OpenAI models, create a `.env` file with the following content:
+If you plan to use OpenAI models, create a **`.env` file** with the following content:
 
 ```bash
 OPENAI_API_KEY="Your OpenAI API key"
@@ -113,10 +77,7 @@ You can adapt it without cloning the repository by setting up an environment var
 
 ## 🚀 Usage: Indexing
 
-You can skip this section [download the demo database with embeddings of a Formula One Dataset](https://spotlightpublic.blob.core.windows.net/docs-data/rag_demo/docs-db.zip). This dataset is based on articles from Wikipedia and is licensed under the Creative Commons Attribution-ShareAlike License. The original articles and a list of authors can be found on the respective Wikipedia pages.
-To use your own data create a new data/docs directory within the project and place your documents in there (recursive directories are supported).
-
-> Note: at the moment, only HTML files can be indexed but it can be adjusted in the [create-db](assistant/cli/create_db.py) script, this requires the [⚒️ Local Setup](#⚒️-local-setup)
+You can skip this section if you have already had a vector database. Otherwise, to use your own data, create a new **./data/docs** directory within the project and place your documents in there (recursive directories are supported). You can also specify a different directory path under the attribute, **docs_directory**, in the setting file, [settings.yaml](settings.yaml). For the configuration of chunk size and chunk overlap, you can specify them in the [create-db](assistant/cli/create_db.py)
 
 Begin the process by indexing your documents. Execute the following command:
 
@@ -180,7 +141,7 @@ Exploring the exemplary F1 Dataset and over 500 questions from our [RAG evaluati
 
 ## 🔎 Tutorials and References
 
-To learn more about visulization for RAG, check out our articles:
+To learn more about visulization for RAG, check out articles mentioned in the renumics-rag repo:
 
 - [ITNext: Visualize your RAG Data - EDA for Retrieval-Augmented Generation](https://itnext.io/visualize-your-rag-data-eda-for-retrieval-augmented-generation-0701ee98768f): visualization of single questions, answers, and related documents shows large potential for RAG. Dimensionality reduction techniques can make the embedding space accessible for users and developers
   ![UMAP dimensionality reduction of the embeddings of document snippets, colored by to their relevance to the question “Who built the Nürburgring?”](assets/img/rag1_ani.gif)
