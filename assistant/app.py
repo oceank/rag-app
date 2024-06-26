@@ -1,10 +1,13 @@
 from typing import Any, Callable, Dict, List, Optional, Type, Union, get_args
 
+import re
+import datetime
 import pandas as pd
 import streamlit as st
 import typer
 from langchain.vectorstores.chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.ollama import OllamaEmbeddings
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables import Runnable
@@ -14,6 +17,7 @@ from langchain_openai import (
     ChatOpenAI,
     OpenAIEmbeddings,
 )
+from langchain_community.chat_models import ChatOllama
 
 from assistant import (
     get_chromadb,
@@ -21,7 +25,7 @@ from assistant import (
     get_embeddings_model_config,
     get_llm,
     get_llm_config,
-    get_rag_chain,
+    get_rag_chain, get_rag_chain_with_task_breakdown,
     get_retriever,
     question_as_doc,
 )
@@ -56,9 +60,11 @@ HASH_FUNCS: Dict[Union[str, Type], Callable[[Any], Any]] = {
     AzureOpenAIEmbeddings: hash_model,
     OpenAIEmbeddings: hash_model,
     HuggingFaceEmbeddings: hash_model,
+    OllamaEmbeddings: hash_model,
     AzureChatOpenAI: hash_model,
     ChatOpenAI: hash_model,
     HuggingFacePipeline: hash_model,
+    ChatOllama: hash_model,
 }
 
 
@@ -88,7 +94,8 @@ def _get_rag_chain(
     retriever = get_retriever(
         vectorstore, k, search_type, score_threshold, fetch_k, lambda_mult
     )
-    chain = get_rag_chain(retriever, llm)
+    #chain = get_rag_chain(retriever, llm)
+    chain = get_rag_chain_with_task_breakdown(retriever, llm)
     return chain
 
 
@@ -214,6 +221,29 @@ def st_settings(
             key="embeddings_model_name",
         )
 
+def get_date_time_str() -> str:
+    now = datetime.datetime.now()
+    return now.strftime("%Y-%m-%d %H:%M:%S")
+
+def check_visualization_code(content: str) -> None:
+    
+    x = re.search(r'```python\n(.*?)\n```', content, re.DOTALL)
+    plotting_code_search_key = "fig, ax = plt.subplots"
+    if x is not None:
+        code = x.group(1)
+        if plotting_code_search_key in code:
+            code += "\n\nfig\n"
+            local_dict = {}
+            exec(code, {}, local_dict)
+        
+            fig = local_dict.get('fig')
+            st.pyplot(fig)
+
+def add_time_to_message(message: str) -> str:
+    if "###" == message[:3]:
+        return f"[{get_date_time_str()}]\n{message}"
+    else:
+        return f"[{get_date_time_str()}] {message}"
 
 def st_chat_messages(messages: List[Message]) -> None:
     for message in messages:
@@ -221,9 +251,11 @@ def st_chat_messages(messages: List[Message]) -> None:
             if isinstance(message, NestedMessage):
                 with st.expander(message.content):
                     for content in message.subcontents:
-                        st.write(content)
+                        st.write(add_time_to_message(content))
+                        check_visualization_code(content)
             else:
-                st.write(message.content)
+                st.write(add_time_to_message(message.content))
+                check_visualization_code(message.content)
 
 
 def st_chat(on_question: Callable[[str], List[Message]]) -> None:
@@ -315,6 +347,7 @@ def st_app(
                 sources.append(f"**Source**: \"{doc.metadata['source']}\"")
             messages.append(NestedMessage("source", "Sources", sources))
             messages.append(Message("assistant", rag_answer["answer"]))
+            print(rag_answer["answer"])
             return messages
 
         viewer = get_or_create_spotlight_viewer()

@@ -141,7 +141,7 @@ def create_db(
 
     if docs:
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000, chunk_overlap=200, add_start_index=True
+            chunk_size=2000, chunk_overlap=200, add_start_index=True
         )
         splits = text_splitter.split_documents(docs)
         split_ids = list(map(stable_hash, splits))
