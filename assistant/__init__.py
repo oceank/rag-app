@@ -77,6 +77,7 @@ from typing import Any, Dict, List, Optional, Tuple, cast, get_args
 import dotenv
 from langchain.vectorstores.chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.ollama import OllamaEmbeddings
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -90,6 +91,7 @@ from langchain_openai import (
     ChatOpenAI,
     OpenAIEmbeddings,
 )
+from langchain_community.chat_models import ChatOllama
 
 from .exceptions import HFImportError
 from .settings import guess_model_type
@@ -156,7 +158,6 @@ def get_hf_embeddings_model(
         model_name=name, encode_kwargs=encode_kwargs, model_kwargs=model_kwargs
     )
 
-
 def get_embeddings_model(
     name: str,
     model_type: ModelType,
@@ -170,6 +171,8 @@ def get_embeddings_model(
         return OpenAIEmbeddings(model=name)
     if model_type == "hf":
         return get_hf_embeddings_model(name, device, trust_remote_code)
+    if model_type == "ollama":
+        return OllamaEmbeddings(model=name)
     raise TypeError(f"Unknown model type '{model_type}'.")
 
 
@@ -181,6 +184,8 @@ def get_embeddings_model_config(embeddings_model: Embeddings) -> Tuple[str, Mode
         return embeddings_model.model, "openai"
     if isinstance(embeddings_model, HuggingFaceEmbeddings):
         return embeddings_model.model_name, "hf"
+    if isinstance(embeddings_model, OllamaEmbeddings):
+        return embeddings_model.model, "ollama"
     raise TypeError(f"Unknown model type `{type(embeddings_model)}`.")
 
 
@@ -221,6 +226,8 @@ def get_llm(
         return ChatOpenAI(model=name, temperature=0.0)
     if model_type == "hf":
         return get_hf_llm(name, device, trust_remote_code, torch_dtype)
+    if model_type == "ollama":
+        return ChatOllama(model=name, temperature=0.0)
     raise TypeError(f"Unknown model type '{model_type}'.")
 
 
@@ -232,6 +239,8 @@ def get_llm_config(llm: LLM) -> Tuple[str, ModelType]:
         return llm.model_name, "openai"
     if isinstance(llm, HuggingFacePipeline):
         return llm.pipeline.model, "hf"
+    if isinstance(llm, ChatOllama):
+        return llm.model, "ollama"
     raise TypeError(f"Unknown model type `{type(llm)}`.")
 
 
@@ -383,6 +392,79 @@ FINAL ANSWER: """
         }
     ).assign(answer=rag_chain_from_docs)
     return rag_chain_with_source
+
+
+def get_rag_chain_with_task_breakdown(retriever: VectorStoreRetriever, llm: LLM) -> Runnable:
+    from langchain.prompts import PromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+    breakdown_prompt = PromptTemplate(
+        template="""
+            You are an expert in solid state battery, and your task is to answer user's question professionally.
+            You need to design several intermediate steps to enhance processing and reasoning, aiming to reach the final answers through the intermediate steps.
+            Ensure that each intermediate step is interconnected and collectively addresses the user's inquiry. These intermediate thoughts should encompass various aspects of solid state battery, requiring information retrieval from a comprehensive library.
+            Your approach should systematically break down the query, ensuring a thorough exploration of the topic from multiple angles to provide a well-rounded answer.
+            Your steps needs to be closely involve different aspects in solid state battery and material science, you must contain domain knowledge aspects in each step, and include reasoning thoughts
+            You only need to list the intermeditae steps.
+            Your output should be in unified format, for each step, encapsulate it as
+            [step 1]
+            the content for step1
+            [step 2]
+            the content for step2
+            [step 3]
+            the content for step3
+            ...... \n\n
+            Here is the user question: {question} \n\n
+            Here is the context for the user question: \n\n {source_documents} \n
+            The context for the user's question is retrieved from the literature database, which contains papers on solid-state batteries, using similarity search. \n
+            """,
+        input_variables=["question", "source_documents"],
+    )
+
+    step_analysis_prompt = PromptTemplate(
+        # - When data visualization is necessary, generate Python code using libraries such as matplotlib, seaborn, or plotly to create visual representations that help explain your thoughts. Generating the Python code is sufficient; do not attempt to execute it.\n
+        template="""
+            You are an expert in solid state battery, and your task is to answer user's question professionally:\n
+                - Informative: Furnish detailed insights, drawing upon the most relevant facts and figures.\n
+                - Correct: Ensure factual accuracy in every aspect of your response.\n
+                - Knowledgeable: Display a profound understanding of the subject matter, including advanced concepts and recent advancements in the field of solid state battery.\n
+                - Holistic: Offer a well-rounded perspective, considering various facets of the topic at hand.\n\n
+            You are given a list of interconnected intermediate steps toward answering a question on solid state battery. As you address each question, please adhere to the following guidelines:\n
+                - Stay On Topic: Concentrate solely on the query posed. Your reply should be closely aligned with the question, avoiding tangential or unrelated content.\n
+                - Analysis of Intermediate Thoughts: Make sure to follow these intermediate steps sequentially and address each step in a comprehensive and coherent manner, providing detailed explanations and insights.\n
+                - Before responding, take a moment to center yourself. Breathe deeply, and proceed with a step-by-step analytical approach, ensuring that your expertise shines through in a manner that is both engaging and enlightening.\n
+                - Data Visualization: you are good at data visualization and know how to use the Python library, matplotlib, to create visual representations that help explain your thoughts. When generating the Python visualization code, please adhere to the following instructions:\n
+                    * Ensure that the Python visualization code is bug-free. Expecially, make sure that all variables are defined before they are used in the generated code.\n
+                    * Use the subplots() method to create a figure object, fig, and an Axes object, ax. And then use the Axes object, ax, for writing the code of actual plotting. \n
+                    * Do not use matplotlib.pyplot to directly write the code for plotting. Instead, use the the Axes object, ax. \n
+                    * Do not add a piece of code to show the plot.\n
+                    * Before outputing the code, ensure the input data for the plot is well defined.\n
+                    * Generating the Python code is sufficient; do not attempt to execute it.\n
+            ...... \n\n
+            Here is the user question: {question} \n\n
+            Here is the list of intermediate steps: \n\n {steps} \n\n
+            Here is the context for the user question: \n\n {source_documents} \n
+            The context for the user's question is retrieved from the literature database, which contains papers on solid-state batteries, using similarity search. \n
+            """,
+        input_variables=["question", "source_documents", "steps"],
+    )
+    breakdown_analysis_parser = breakdown_prompt | llm | StrOutputParser()
+    breakdown_analysis = (
+        RunnablePassthrough.assign(
+            source_documents=(lambda x: format_docs(x["source_documents"]))
+        )
+        | { "question": RunnablePassthrough(), "source_documents": RunnablePassthrough(), "steps": breakdown_analysis_parser}
+        | step_analysis_prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    answer_with_intermediate_steps = RunnableParallel(
+        {  # type: ignore
+            "source_documents": retriever,
+            "question": RunnablePassthrough(),
+        }
+    ).assign(answer=breakdown_analysis)
+    return answer_with_intermediate_steps
 
 
 def stable_hash(doc: Document) -> str:
